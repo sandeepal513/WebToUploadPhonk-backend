@@ -1,0 +1,219 @@
+// This is your Prisma schema file for MySQL
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// User role enum
+enum Role {
+  USER
+  CREATOR
+  ADMIN
+}
+
+// -------------------------------------------------------------
+// USER DETAILS (Registered Accounts)
+// -------------------------------------------------------------
+model User {
+  id             String        @id @default(uuid())
+  username       String        @unique
+  email          String        @unique
+  passwordHash   String        @map("password_hash")
+  name           String
+  bio            String?       @db.Text
+  avatar         String?       @db.Text
+  role           Role          @default(USER)
+  followersCount Int           @default(0) @map("followers_count")
+  followingCount Int           @default(0) @map("following_count")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  tracks         Track[]
+  likes          Like[]
+  comments       Comment[]
+  playlists      Playlist[]
+  playHistories  PlayHistory[]
+
+  @@map("users")
+}
+
+// -------------------------------------------------------------
+// GUEST ACCOUNT DETAILS (Guest Sessions & Anonymous Activity)
+// -------------------------------------------------------------
+model GuestAccount {
+  id             String        @id @default(uuid())
+  guestToken     String        @unique @map("guest_token")
+  guestName      String        @default("Guest Producer") @map("guest_name")
+  deviceId       String?       @map("device_id")
+  ipAddress      String?       @map("ip_address")
+  isActive       Boolean       @default(true) @map("is_active")
+  lastActiveAt   DateTime      @default(now()) @map("last_active_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  tracks         Track[]
+  likes          Like[]
+  comments       Comment[]
+  playlists      Playlist[]
+  playHistories  PlayHistory[]
+
+  @@map("guest_accounts")
+}
+
+// -------------------------------------------------------------
+// PHONK TRACK DETAILS (Songs, Beats, Audio Metadata)
+// -------------------------------------------------------------
+model Track {
+  id            String        @id @default(uuid())
+  title         String
+  artist        String
+  album         String        @default("SINGLE")
+  subgenre      String        @default("Drift Phonk")
+  duration      String        @default("2:45")
+  durationSec   Int           @default(165) @map("duration_sec")
+  plays         Int           @default(0)
+  likesCount    Int           @default(0) @map("likes_count")
+  downloadCount Int           @default(0) @map("download_count")
+  bpm           Int           @default(150)
+  rating        Int           @default(5)
+  coverUrl      String        @map("cover_url") @db.Text
+  audioUrl      String        @map("audio_url") @db.Text
+  downloadUrl   String?       @map("download_url") @db.Text
+  mood          String        @default("Aggressive")
+  featured      Boolean       @default(false)
+  description   String?       @db.Text
+  
+  // Track Ownership (Can be uploaded by registered User or Guest Account)
+  userId        String?       @map("user_id")
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  guestAccountId String?      @map("guest_account_id")
+  guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  likes         Like[]
+  comments      Comment[]
+  playlistItems PlaylistItem[]
+  playHistories PlayHistory[]
+
+  @@index([subgenre])
+  @@index([mood])
+  @@index([userId])
+  @@index([guestAccountId])
+  @@map("tracks")
+}
+
+// -------------------------------------------------------------
+// LIKES & FAVORITES
+// -------------------------------------------------------------
+model Like {
+  id             String        @id @default(uuid())
+  trackId        String        @map("track_id")
+  track          Track         @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  userId         String?       @map("user_id")
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  guestAccountId String?       @map("guest_account_id")
+  guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@unique([userId, trackId])
+  @@unique([guestAccountId, trackId])
+  @@map("likes")
+}
+
+// -------------------------------------------------------------
+// TRACK COMMENTS
+// -------------------------------------------------------------
+model Comment {
+  id             String        @id @default(uuid())
+  trackId        String        @map("track_id")
+  track          Track         @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  userId         String?       @map("user_id")
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  guestAccountId String?       @map("guest_account_id")
+  guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: Cascade)
+
+  authorName     String        @map("author_name")
+  authorAvatar   String?       @map("author_avatar") @db.Text
+  text           String        @db.Text
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@index([trackId])
+  @@map("comments")
+}
+
+// -------------------------------------------------------------
+// PLAYLISTS (User or Guest custom collections)
+// -------------------------------------------------------------
+model Playlist {
+  id             String         @id @default(uuid())
+  title          String
+  description    String?        @db.Text
+  coverUrl       String?        @map("cover_url") @db.Text
+  isPublic       Boolean        @default(true) @map("is_public")
+
+  userId         String?        @map("user_id")
+  user           User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  guestAccountId String?        @map("guest_account_id")
+  guestAccount   GuestAccount?  @relation(fields: [guestAccountId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  items          PlaylistItem[]
+
+  @@map("playlists")
+}
+
+// -------------------------------------------------------------
+// PLAYLIST ITEMS
+// -------------------------------------------------------------
+model PlaylistItem {
+  id         String   @id @default(uuid())
+  playlistId String   @map("playlist_id")
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  trackId    String   @map("track_id")
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  position   Int      @default(0)
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  @@unique([playlistId, trackId])
+  @@map("playlist_items")
+}
+
+// -------------------------------------------------------------
+// PLAY HISTORY (Listening stats and recents)
+// -------------------------------------------------------------
+model PlayHistory {
+  id             String        @id @default(uuid())
+  trackId        String        @map("track_id")
+  track          Track         @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  userId         String?       @map("user_id")
+  user           User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  guestAccountId String?       @map("guest_account_id")
+  guestAccount   GuestAccount? @relation(fields: [guestAccountId], references: [id], onDelete: Cascade)
+
+  playedAt       DateTime      @default(now()) @map("played_at")
+
+  @@map("play_history")
+}

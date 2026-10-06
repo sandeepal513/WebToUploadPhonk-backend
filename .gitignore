@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# SQLite Database files (if any)
+*.db
+*.db-shm
+*.db-wal
+db/*.db
+
+# Uploaded User Files (Keep directories structure, ignore actual uploads)
+uploads/audio/*
+!uploads/audio/.gitkeep
+uploads/covers/*
+!uploads/covers/.gitkeep
+
+# IDE & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
