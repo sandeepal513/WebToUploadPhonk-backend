@@ -56,6 +56,9 @@ router.get('/:username', async (req, res) => {
   }
 });
 
+const upload = require('../middleware/upload');
+const { uploadProfileImageToSupabase } = require('../services/supabase');
+
 // UPDATE PROFILE (Requires Auth)
 router.put('/profile', verifyToken, async (req, res) => {
   try {
@@ -88,6 +91,54 @@ router.put('/profile', verifyToken, async (req, res) => {
   } catch (error) {
     console.error('Update profile error:', error);
     res.status(500).json({ error: 'Failed to update user profile.' });
+  }
+});
+
+// UPLOAD PROFILE AVATAR IMAGE (To Supabase phonkhub-profile bucket)
+router.post('/avatar', verifyToken, upload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No avatar image file uploaded.' });
+    }
+
+    let avatarUrl;
+    try {
+      avatarUrl = await uploadProfileImageToSupabase(
+        req.file.path,
+        req.file.originalname || req.file.filename,
+        req.file.mimetype || 'image/jpeg'
+      );
+    } catch (supaErr) {
+      console.warn('⚠️ Supabase profile upload error, fallback to local:', supaErr.message);
+      const host = req.get('host');
+      const protocol = req.protocol;
+      avatarUrl = `${protocol}://${host}/uploads/covers/${req.file.filename}`;
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User profile not found.' });
+    }
+
+    user.avatar = avatarUrl;
+    await user.save();
+
+    res.json({
+      message: 'Profile picture updated successfully!',
+      avatar: avatarUrl,
+      user: {
+        id: user._id.toString(),
+        username: `@${user.username}`,
+        name: user.name,
+        bio: user.bio,
+        avatar: user.avatar,
+        followers: user.followersCount,
+        following: user.followingCount,
+      },
+    });
+  } catch (error) {
+    console.error('Profile avatar upload error:', error);
+    res.status(500).json({ error: 'Failed to upload profile picture.' });
   }
 });
 

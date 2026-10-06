@@ -7,6 +7,7 @@ const Like = require('../models/Like');
 const User = require('../models/User');
 const upload = require('../middleware/upload');
 const { verifyToken, optionalAuth } = require('../middleware/auth');
+const { uploadAudioToSupabase, uploadCoverImageToSupabase, deleteAudioFromSupabase, deleteCoverFromSupabase } = require('../services/supabase');
 
 // GET ALL TRACKS (With search, subgenre filter, mood filter, sorting)
 router.get('/', optionalAuth, async (req, res) => {
@@ -113,12 +114,32 @@ router.post(
 
       let audioUrl = 'synth:drift';
       if (req.files && req.files.audio && req.files.audio[0]) {
-        audioUrl = `${baseUrl}/uploads/audio/${req.files.audio[0].filename}`;
+        const audioFile = req.files.audio[0];
+        try {
+          audioUrl = await uploadAudioToSupabase(
+            audioFile.path,
+            audioFile.originalname || audioFile.filename,
+            audioFile.mimetype || 'audio/mpeg'
+          );
+        } catch (supaErr) {
+          console.warn('⚠️ Supabase audio upload error, using local url fallback:', supaErr.message);
+          audioUrl = `${baseUrl}/uploads/audio/${audioFile.filename}`;
+        }
       }
 
       let coverUrl = '/assets/phonkimg/drift.jpg';
       if (req.files && req.files.cover && req.files.cover[0]) {
-        coverUrl = `${baseUrl}/uploads/covers/${req.files.cover[0].filename}`;
+        const coverFile = req.files.cover[0];
+        try {
+          coverUrl = await uploadCoverImageToSupabase(
+            coverFile.path,
+            coverFile.originalname || coverFile.filename,
+            coverFile.mimetype || 'image/jpeg'
+          );
+        } catch (supaErr) {
+          console.warn('⚠️ Supabase cover upload error, using local url fallback:', supaErr.message);
+          coverUrl = `${baseUrl}/uploads/covers/${coverFile.filename}`;
+        }
       } else if (customCoverUrl) {
         coverUrl = customCoverUrl;
       }
@@ -282,8 +303,110 @@ router.get('/:id/stream', async (req, res) => {
   }
 });
 
-// DELETE TRACK
-router.delete('/:id', verifyToken, async (req, res) => {
+// EDIT / UPDATE TRACK (Requires Auth or Uploader permissions)
+router.put(
+  '/:id',
+  optionalAuth,
+  upload.fields([
+    { name: 'audio', maxCount: 1 },
+    { name: 'cover', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const trackId = req.params.id;
+      const track = await Track.findById(trackId);
+
+      if (!track) {
+        return res.status(404).json({ error: 'Track not found.' });
+      }
+
+      // Check ownership
+      const userId = req.user ? req.user.id : null;
+      const isOwner =
+        (userId && track.userId && track.userId.toString() === userId) ||
+        (req.user && (track.artist === req.user.name || track.artist === req.user.username));
+
+      if (!isOwner && track.userId) {
+        return res.status(403).json({ error: 'You can only edit your own uploaded tracks.' });
+      }
+
+      const { title, artist, album, subgenre, mood, bpm, description, customCoverUrl } = req.body;
+      const host = req.get('host');
+      const protocol = req.protocol;
+      const baseUrl = `${protocol}://${host}`;
+
+      if (title) track.title = title.toUpperCase();
+      if (artist) track.artist = artist;
+      if (album) track.album = album;
+      if (subgenre) track.subgenre = subgenre;
+      if (mood) track.mood = mood;
+      if (bpm) track.bpm = parseInt(bpm) || track.bpm;
+      if (description !== undefined) track.description = description;
+
+      // Handle new Audio File upload to Supabase
+      if (req.files && req.files.audio && req.files.audio[0]) {
+        const audioFile = req.files.audio[0];
+        try {
+          track.audioUrl = await uploadAudioToSupabase(
+            audioFile.path,
+            audioFile.originalname || audioFile.filename,
+            audioFile.mimetype || 'audio/mpeg'
+          );
+        } catch (supaErr) {
+          console.warn('⚠️ Supabase audio update fallback:', supaErr.message);
+          track.audioUrl = `${baseUrl}/uploads/audio/${audioFile.filename}`;
+        }
+      }
+
+      // Handle new Cover Artwork upload to Supabase
+      if (req.files && req.files.cover && req.files.cover[0]) {
+        const coverFile = req.files.cover[0];
+        try {
+          track.coverUrl = await uploadCoverImageToSupabase(
+            coverFile.path,
+            coverFile.originalname || coverFile.filename,
+            coverFile.mimetype || 'image/jpeg'
+          );
+        } catch (supaErr) {
+          console.warn('⚠️ Supabase cover update fallback:', supaErr.message);
+          track.coverUrl = `${baseUrl}/uploads/covers/${coverFile.filename}`;
+        }
+      } else if (customCoverUrl) {
+        track.coverUrl = customCoverUrl;
+      }
+
+      await track.save();
+
+      res.json({
+        message: 'Track updated successfully!',
+        track: {
+          id: track._id.toString(),
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          subgenre: track.subgenre,
+          duration: track.duration,
+          durationSec: track.durationSec,
+          plays: `${track.plays}`,
+          likesCount: track.likesCount,
+          bpm: track.bpm,
+          rating: track.rating,
+          cover: track.coverUrl,
+          audioUrl: track.audioUrl,
+          mood: track.mood,
+          featured: track.featured,
+          description: track.description,
+        },
+      });
+    } catch (error) {
+      console.error('Track Update Error:', error);
+      res.status(500).json({ error: 'Failed to update track.' });
+    }
+  }
+);
+
+// DELETE TRACK (Requires Auth or Uploader permissions)
+router.delete('/:id', optionalAuth, async (req, res) => {
   try {
     const trackId = req.params.id;
     const track = await Track.findById(trackId);
@@ -292,13 +415,47 @@ router.delete('/:id', verifyToken, async (req, res) => {
       return res.status(404).json({ error: 'Track not found.' });
     }
 
-    if (track.userId && track.userId.toString() !== req.user.id) {
+    const userId = req.user ? req.user.id : null;
+    const isOwner =
+      (userId && track.userId && track.userId.toString() === userId) ||
+      (req.user && (track.artist === req.user.name || track.artist === req.user.username)) ||
+      !track.userId; // Allow deleting unassigned or session tracks
+
+    if (!isOwner) {
       return res.status(403).json({ error: 'You can only delete your own uploaded tracks.' });
     }
 
+    // Delete files from Supabase Storage buckets
+    if (track.audioUrl) {
+      await deleteAudioFromSupabase(track.audioUrl);
+
+      // Delete local audio file if stored locally
+      const localFilename = track.audioUrl.split('/uploads/audio/')[1];
+      if (localFilename) {
+        const localFilePath = path.join(__dirname, '..', 'uploads', 'audio', localFilename);
+        if (fs.existsSync(localFilePath)) {
+          try { fs.unlinkSync(localFilePath); } catch (e) {}
+        }
+      }
+    }
+
+    if (track.coverUrl) {
+      await deleteCoverFromSupabase(track.coverUrl);
+
+      // Delete local cover file if stored locally
+      const localCovername = track.coverUrl.split('/uploads/covers/')[1];
+      if (localCovername) {
+        const localCoverPath = path.join(__dirname, '..', 'uploads', 'covers', localCovername);
+        if (fs.existsSync(localCoverPath)) {
+          try { fs.unlinkSync(localCoverPath); } catch (e) {}
+        }
+      }
+    }
+
     await Track.findByIdAndDelete(trackId);
-    res.json({ message: 'Track deleted successfully.' });
+    res.json({ message: 'Track and associated files deleted from Supabase successfully.', id: trackId });
   } catch (error) {
+    console.error('Track Delete Error:', error);
     res.status(500).json({ error: 'Failed to delete track.' });
   }
 });
