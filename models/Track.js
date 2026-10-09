@@ -79,11 +79,6 @@ const trackSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
-    guestAccountId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'GuestAccount',
-      default: null,
-    },
   },
   {
     timestamps: true,

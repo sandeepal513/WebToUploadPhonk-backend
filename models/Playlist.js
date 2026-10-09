@@ -43,11 +43,6 @@ const playlistSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
-    guestAccountId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'GuestAccount',
-      default: null,
-    },
     items: [playlistItemSchema],
   },
   {

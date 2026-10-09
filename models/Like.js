@@ -12,11 +12,6 @@ const likeSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
-    guestAccountId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'GuestAccount',
-      default: null,
-    },
   },
   {
     timestamps: true,
@@ -24,6 +19,5 @@ const likeSchema = new mongoose.Schema(
 );
 
 likeSchema.index({ userId: 1, trackId: 1 }, { unique: true, sparse: true });
-likeSchema.index({ guestAccountId: 1, trackId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Like', likeSchema);

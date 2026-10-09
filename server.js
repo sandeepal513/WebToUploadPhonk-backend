@@ -7,7 +7,6 @@ const { connectDB } = require('./db/database');
 const authRoutes = require('./routes/auth');
 const trackRoutes = require('./routes/tracks');
 const userRoutes = require('./routes/users');
-const guestRoutes = require('./routes/guests');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,7 +19,7 @@ app.use(
   cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-guest-token'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 
@@ -35,7 +34,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', authRoutes);
 app.use('/api/tracks', trackRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/guests', guestRoutes);
 
 // Root Welcome Endpoint
 app.get('/', (req, res) => {
@@ -47,7 +45,7 @@ app.get('/', (req, res) => {
       health: '/api/health',
       tracks: '/api/tracks',
       auth: '/api/auth',
-      guests: '/api/guests',
+      users: '/api/users',
     },
   });
 });
