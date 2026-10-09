@@ -1,15 +1,48 @@
-const mongoose = require('mongoose');
+const mysql = require('mysql2/promise');
+const fs = require('fs');
+const path = require('path');
 
-const connectDB = async () => {
+const pool = mysql.createPool({
+  host: process.env.MYSQL_HOST,
+  port: process.env.MYSQL_PORT,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  ssl: {
+    rejectUnauthorized: false,
+  },
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+async function connectDB() {
   try {
-    const connStr = process.env.MONGODB_URI || 'mongodb://localhost:27017/phonk_hub';
-    const conn = await mongoose.connect(connStr);
-    console.log(`🍃 MongoDB Connected: ${conn.connection.host} / ${conn.connection.name}`);
-  } catch (error) {
-    console.error(`❌ MongoDB Connection Error: ${error.message}`);
-    // If local MongoDB service is not running yet, log helpful warning instead of crashing app completely
-    console.warn('👉 Make sure MongoDB service (mongod) is running locally or provide a valid MONGODB_URI in .env');
-  }
-};
+    const connection = await pool.getConnection();
+    console.log(`⚡ Connected to Aiven MySQL Cloud: ${process.env.MYSQL_HOST}:${process.env.MYSQL_PORT} / ${process.env.MYSQL_DATABASE || 'defaultdb'}`);
+    connection.release();
 
-module.exports = connectDB;
+    // Ensure tables exist
+    const schemaPath = path.join(__dirname, 'schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const sql = fs.readFileSync(schemaPath, 'utf8');
+      const statements = sql
+        .split(';')
+        .map((stmt) => stmt.trim())
+        .filter((stmt) => stmt.length > 0);
+
+      for (const stmt of statements) {
+        await pool.query(stmt);
+      }
+      console.log('✅ MySQL tables verified & synchronized successfully!');
+    }
+  } catch (error) {
+    console.error('❌ MySQL Connection Error:', error.message);
+  }
+}
+
+module.exports = {
+  pool,
+  query: (sql, params) => pool.query(sql, params),
+  connectDB,
+};

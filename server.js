@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const connectDB = require('./db/database');
+const { connectDB } = require('./db/database');
 
 const authRoutes = require('./routes/auth');
 const trackRoutes = require('./routes/tracks');
@@ -12,13 +12,13 @@ const guestRoutes = require('./routes/guests');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Connect to MongoDB
+// Connect to Aiven MySQL Cloud Database
 connectDB();
 
 // Enable CORS for frontend requests
 app.use(
   cors({
-    origin: '*', // Allow all origins for dev/production flex
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-guest-token'],
   })
@@ -28,7 +28,7 @@ app.use(
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Static directory for uploaded files (audio & cover images)
+// Static directory for uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API Routes
@@ -41,7 +41,7 @@ app.use('/api/guests', guestRoutes);
 app.get('/', (req, res) => {
   res.json({
     status: 'online',
-    service: 'PHONK HUB Backend API',
+    service: 'PHONK HUB Backend API (Aiven MySQL + Supabase Storage Edition)',
     message: '🏎️ Welcome to PHONK HUB Backend API',
     endpoints: {
       health: '/api/health',
@@ -56,7 +56,9 @@ app.get('/', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    service: 'PHONK HUB Backend API (MongoDB Edition)',
+    service: 'PHONK HUB Backend API (Aiven MySQL + Supabase)',
+    database: 'Aiven MySQL Cloud',
+    storage: 'Supabase Storage (phonkhub-audio, phonkhub-profile)',
     timestamp: new Date().toISOString(),
   });
 });
@@ -77,11 +79,13 @@ app.use((err, req, res, next) => {
 // Start Server
 const server = app.listen(PORT, () => {
   console.log(`
-  🏎️  =========================================
-  🔥  PHONK HUB BACKEND SERVER IS RUNNING (MongoDB)
+  🏎️  ==============================================================
+  🔥  PHONK HUB BACKEND IS RUNNING (Aiven MySQL + Supabase CDN)
   📡  URL: http://localhost:${PORT}
   🎧  HEALTH: http://localhost:${PORT}/api/health
-  =========================================
+  🐬  MYSQL DB: ${process.env.MYSQL_HOST}:${process.env.MYSQL_PORT}
+  ☁️  SUPABASE BUCKETS: ${process.env.SUPABASE_AUDIO_BUCKET}, ${process.env.SUPABASE_PROFILE_BUCKET}
+  ==============================================================
   `);
 });
 

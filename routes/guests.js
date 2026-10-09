@@ -1,51 +1,46 @@
 const express = require('express');
 const router = express.Router();
-const GuestAccount = require('../models/GuestAccount');
-const Track = require('../models/Track');
-const Like = require('../models/Like');
-const Playlist = require('../models/Playlist');
 const crypto = require('crypto');
+const { pool } = require('../db/database');
 
-// -------------------------------------------------------------
-// 1. INITIALIZE / FETCH GUEST SESSION
-// -------------------------------------------------------------
+// INITIALIZE / FETCH GUEST SESSION
 router.post('/session', async (req, res) => {
   try {
     let { guestToken, deviceId } = req.body;
     const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-    let guestAccount = null;
-
+    let [rows] = [];
     if (guestToken) {
-      guestAccount = await GuestAccount.findOne({ guestToken });
+      [rows] = await pool.query('SELECT * FROM guest_accounts WHERE guest_token = ?', [guestToken]);
     }
 
-    // If no existing guest account found, generate a new guest account
+    let guestAccount = rows[0] || null;
+
     if (!guestAccount) {
       guestToken = `guest_${crypto.randomBytes(16).toString('hex')}`;
       const randomNum = Math.floor(1000 + Math.random() * 9000);
       const guestName = `Guest Drift #${randomNum}`;
+      const guestId = `gst_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
-      guestAccount = await GuestAccount.create({
-        guestToken,
-        guestName,
-        deviceId: deviceId || null,
-        ipAddress: typeof ipAddress === 'string' ? ipAddress : null,
-        isActive: true,
-      });
-    } else {
-      // Update last active timestamp
-      guestAccount.lastActiveAt = new Date();
-      await guestAccount.save();
+      await pool.query(
+        `INSERT INTO guest_accounts (id, guest_token, guest_name, device_id, ip_address)
+         VALUES (?, ?, ?, ?, ?)`,
+        [guestId, guestToken, guestName, deviceId || null, typeof ipAddress === 'string' ? ipAddress : null]
+      );
+
+      guestAccount = {
+        id: guestId,
+        guest_token: guestToken,
+        guest_name: guestName,
+      };
     }
 
     res.json({
       message: 'Guest session synchronized',
       guestAccount: {
-        id: guestAccount._id.toString(),
-        guestToken: guestAccount.guestToken,
-        guestName: guestAccount.guestName,
-        createdAt: guestAccount.createdAt,
+        id: guestAccount.id,
+        guestToken: guestAccount.guest_token,
+        guestName: guestAccount.guest_name,
       },
     });
   } catch (error) {
@@ -54,9 +49,7 @@ router.post('/session', async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// 2. UPDATE GUEST PROFILE NAME
-// -------------------------------------------------------------
+// UPDATE GUEST PROFILE NAME
 router.put('/profile', async (req, res) => {
   try {
     const { guestToken, guestName } = req.body;
@@ -65,57 +58,27 @@ router.put('/profile', async (req, res) => {
       return res.status(400).json({ error: 'Guest token and new guest name are required.' });
     }
 
-    const updatedGuest = await GuestAccount.findOneAndUpdate(
-      { guestToken },
-      { guestName: guestName.trim() },
-      { new: true }
-    );
+    await pool.query('UPDATE guest_accounts SET guest_name = ? WHERE guest_token = ?', [
+      guestName.trim(),
+      guestToken,
+    ]);
 
-    if (!updatedGuest) {
+    const [rows] = await pool.query('SELECT * FROM guest_accounts WHERE guest_token = ?', [guestToken]);
+
+    if (rows.length === 0) {
       return res.status(404).json({ error: 'Guest account not found.' });
     }
 
     res.json({
       message: 'Guest profile updated',
       guestAccount: {
-        id: updatedGuest._id.toString(),
-        guestName: updatedGuest.guestName,
+        id: rows[0].id,
+        guestName: rows[0].guest_name,
       },
     });
   } catch (error) {
     console.error('Guest update error:', error);
     res.status(500).json({ error: 'Failed to update guest profile.' });
-  }
-});
-
-// -------------------------------------------------------------
-// 3. GET GUEST LIKED TRACKS & UPLOADS
-// -------------------------------------------------------------
-router.get('/activity/:guestToken', async (req, res) => {
-  try {
-    const { guestToken } = req.params;
-
-    const guestAccount = await GuestAccount.findOne({ guestToken });
-    if (!guestAccount) {
-      return res.status(404).json({ error: 'Guest account not found.' });
-    }
-
-    const uploadedTracks = await Track.find({ guestAccountId: guestAccount._id }).sort({ createdAt: -1 });
-    const likes = await Like.find({ guestAccountId: guestAccount._id }).populate('trackId');
-    const playlists = await Playlist.find({ guestAccountId: guestAccount._id });
-
-    res.json({
-      guest: {
-        id: guestAccount._id.toString(),
-        name: guestAccount.guestName,
-        uploadedTracks,
-        likedTracks: likes.map((l) => l.trackId).filter(Boolean),
-        playlists,
-      },
-    });
-  } catch (error) {
-    console.error('Guest activity error:', error);
-    res.status(500).json({ error: 'Failed to fetch guest activity.' });
   }
 });
 

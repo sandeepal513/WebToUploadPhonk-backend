@@ -1,48 +1,52 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const User = require('./models/User');
-const Track = require('./models/Track');
-const GuestAccount = require('./models/GuestAccount');
+const { connectDB, pool } = require('./db/database');
 
 async function seedDB() {
   try {
-    const connStr = process.env.MONGODB_URI || 'mongodb://localhost:27017/phonk_hub';
-    await mongoose.connect(connStr);
-    console.log('🌱 Connected to MongoDB for seeding...');
+    await connectDB();
+    console.log('🌱 Connected to Aiven MySQL Cloud for seeding...');
 
-    // Clear existing data
-    await User.deleteMany({});
-    await Track.deleteMany({});
-    await GuestAccount.deleteMany({});
+    // Clear existing records
+    await pool.query('DELETE FROM likes');
+    await pool.query('DELETE FROM tracks');
+    await pool.query('DELETE FROM guest_accounts');
+    await pool.query('DELETE FROM users');
 
     // 1. Create Default Admin User
+    const adminId = `usr_admin_${Date.now()}`;
     const passwordHash = await bcrypt.hash('phonk123456', 10);
-    const adminUser = await User.create({
-      username: 'phonk_master',
-      email: 'admin@phonkhub.com',
-      passwordHash,
-      name: 'KORDHELL // PHONK HUB OFFICIAL',
-      bio: 'Official Phonk Hub producer channel. High bpm drift phonk & Memphis beats.',
-      avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80',
-      role: 'ADMIN',
-      followersCount: 12400,
-      followingCount: 15,
-    });
-    console.log('✅ Admin user created:', adminUser.username);
+    await pool.query(
+      `INSERT INTO users (id, username, email, password_hash, name, bio, avatar, role, followers_count, following_count)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        adminId,
+        'phonk_master',
+        'admin@phonkhub.com',
+        passwordHash,
+        'KORDHELL // PHONK HUB OFFICIAL',
+        'Official Phonk Hub producer channel. High bpm drift phonk & Memphis beats.',
+        'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80',
+        'ADMIN',
+        12400,
+        15,
+      ]
+    );
+    console.log('✅ Admin user created: phonk_master');
 
     // 2. Create Sample Guest Account
-    const sampleGuest = await GuestAccount.create({
-      guestToken: 'guest_sample_token_808',
-      guestName: 'Drift Guest #808',
-      deviceId: 'web-device-preview',
-      ipAddress: '127.0.0.1',
-    });
-    console.log('✅ Sample Guest Account created:', sampleGuest.guestName);
+    const guestId = `gst_sample_${Date.now()}`;
+    await pool.query(
+      `INSERT INTO guest_accounts (id, guest_token, guest_name, device_id, ip_address)
+       VALUES (?, ?, ?, ?, ?)`,
+      [guestId, 'guest_sample_token_808', 'Drift Guest #808', 'web-device-preview', '127.0.0.1']
+    );
+    console.log('✅ Sample Guest Account created: Drift Guest #808');
 
     // 3. Create Sample Tracks
     const tracks = [
       {
+        id: `trk_1_${Date.now()}`,
         title: 'MURDER IN MY MIND',
         artist: 'KORDHELL',
         album: 'DRIFT MANIA',
@@ -58,11 +62,12 @@ async function seedDB() {
         audioUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=action-cyberpunk-112578.mp3',
         downloadUrl: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=action-cyberpunk-112578.mp3',
         mood: 'Aggressive',
-        featured: true,
+        featured: 1,
         description: 'High energy drift phonk anthem featuring aggressive basslines and distorted cowbells.',
-        userId: adminUser._id,
+        userId: adminId,
       },
       {
+        id: `trk_2_${Date.now()}`,
         title: 'RAVE NIGHT',
         artist: 'DVRST',
         album: 'MEMPHIS NIGHTS',
@@ -78,11 +83,12 @@ async function seedDB() {
         audioUrl: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73379.mp3?filename=cyberpunk-2099-10701.mp3',
         downloadUrl: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8c8a73379.mp3?filename=cyberpunk-2099-10701.mp3',
         mood: 'Energetic',
-        featured: true,
+        featured: 1,
         description: 'Groovy house beats infused with classic Memphis vocal chops.',
-        userId: adminUser._id,
+        userId: adminId,
       },
       {
+        id: `trk_3_${Date.now()}`,
         title: 'SHADOW DANCER',
         artist: 'GHOSTFACE PLAYA',
         album: 'UNDERGROUND SOUNDS',
@@ -98,18 +104,43 @@ async function seedDB() {
         audioUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=dark-mystery-trailer-116581.mp3',
         downloadUrl: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=dark-mystery-trailer-116581.mp3',
         mood: 'Chill',
-        featured: false,
+        featured: 0,
         description: 'Atmospheric wave vibe with sub-bass and smooth synth pads.',
-        userId: adminUser._id,
+        userId: adminId,
       },
     ];
 
-    for (const trackData of tracks) {
-      const created = await Track.create(trackData);
-      console.log(`🎵 Seeded Track: ${created.title} by ${created.artist}`);
+    for (const trk of tracks) {
+      await pool.query(
+        `INSERT INTO tracks 
+         (id, title, artist, album, subgenre, duration, duration_sec, plays, likes_count, download_count, bpm, rating, cover_url, audio_url, download_url, mood, featured, description, user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          trk.id,
+          trk.title,
+          trk.artist,
+          trk.album,
+          trk.subgenre,
+          trk.duration,
+          trk.durationSec,
+          trk.plays,
+          trk.likesCount,
+          trk.downloadCount,
+          trk.bpm,
+          trk.rating,
+          trk.coverUrl,
+          trk.audioUrl,
+          trk.downloadUrl,
+          trk.mood,
+          trk.featured,
+          trk.description,
+          trk.userId,
+        ]
+      );
+      console.log(`🎵 Seeded Track: ${trk.title} by ${trk.artist}`);
     }
 
-    console.log('🎉 MongoDB database successfully seeded!');
+    console.log('🎉 Aiven MySQL database successfully seeded!');
     process.exit(0);
   } catch (err) {
     console.error('❌ Seeding error:', err);

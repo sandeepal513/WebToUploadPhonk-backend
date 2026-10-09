@@ -5,7 +5,7 @@ const fs = require('fs');
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ypmcdnywfarjlcuxtamz.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_7ziSnHK9SJwiLyKCPCBWng_QpMNkfVm';
 
-const AUDIO_BUCKET = process.env.SUPABASE_AUDIO_BUCKET || 'phonkHub-audio';
+const AUDIO_BUCKET = process.env.SUPABASE_AUDIO_BUCKET || 'phonkhub-audio';
 const PROFILE_BUCKET = process.env.SUPABASE_PROFILE_BUCKET || 'phonkhub-profile';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
