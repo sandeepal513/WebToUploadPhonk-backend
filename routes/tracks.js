@@ -120,7 +120,7 @@ router.post(
         );
       }
 
-      let coverUrl = 'https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=500&q=80';
+      let coverUrl = customCoverUrl || '';
       if (req.files && req.files.cover && req.files.cover[0]) {
         const coverFile = req.files.cover[0];
         coverUrl = await uploadCoverImageToSupabase(
@@ -128,8 +128,6 @@ router.post(
           coverFile.originalname,
           coverFile.mimetype || 'image/jpeg'
         );
-      } else if (customCoverUrl) {
-        coverUrl = customCoverUrl;
       }
 
       const trackId = `trk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;

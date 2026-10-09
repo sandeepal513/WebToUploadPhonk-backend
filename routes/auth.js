@@ -30,7 +30,7 @@ router.post('/register', async (req, res) => {
     const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const passwordHash = await bcrypt.hash(password, 10);
     const displayName = name || cleanUsername;
-    const defaultAvatar = `https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80`;
+    const defaultAvatar = '';
 
     await pool.query(
       `INSERT INTO users (id, username, email, password_hash, name, bio, avatar)

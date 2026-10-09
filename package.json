@@ -1,12 +1,11 @@
 {
   "name": "webtouploadphonk-backend",
   "version": "1.0.0",
-  "description": "PHONK HUB Backend API powered by MongoDB & Mongoose",
+  "description": "PHONK HUB Backend API powered by MySQL & Supabase Storage",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
-    "seed": "node seed.js"
+    "dev": "node server.js"
   },
   "repository": {
     "type": "git",
